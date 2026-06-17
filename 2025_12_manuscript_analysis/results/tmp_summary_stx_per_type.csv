@@ -1,0 +1,30 @@
+"fragmentation_status","Stx_type","stx_profile","Summarize_subunit_type"
+"Collapsed stx","stx_A","stx1a; stx1a; stx2a; stx2a",4
+"Collapsed stx","stx_A","stx1a; stx2a; stx2a",6
+"Collapsed stx","stx_A","stx2c; stx2c",4
+"Collapsed stx","stx_B","stx1a; stx1a; stx2a; stx2a",4
+"Collapsed stx","stx_B","stx1a; stx2a; stx2a",6
+"Collapsed stx","stx_B","stx2a; stx2a",6
+"Collapsed stx","stx_B","stx2c; stx2c",4
+"Complete stx","stx_A","stx1a",7
+"Complete stx","stx_A","stx1a; stx2a",70
+"Complete stx","stx_A","stx1a; stx2c",34
+"Complete stx","stx_A","stx2a",24
+"Complete stx","stx_A","stx2a; stx2a",4
+"Complete stx","stx_A","stx2c",44
+"Complete stx","stx_B","stx1a",7
+"Complete stx","stx_B","stx1a; stx2a",70
+"Complete stx","stx_B","stx1a; stx2c",32
+"Complete stx","stx_B","stx2a",24
+"Complete stx","stx_B","stx2a; stx2c",4
+"Complete stx","stx_B","stx2c",43
+"Fragmented stx","stx_A","stx1a; stx2a; stx2d",3
+"Fragmented stx","stx_A","stx2a; stx2a",2
+"Fragmented stx","stx_A","stx2a; stx2a; stx2c",3
+"Fragmented stx","stx_A","stx2a; stx2c",60
+"Fragmented stx","stx_A","stx2c",1
+"Fragmented stx","stx_B","stx1a; stx2a; stx2d",3
+"Fragmented stx","stx_B","stx1a; stx2c",2
+"Fragmented stx","stx_B","stx2a; stx2a; stx2c",3
+"Fragmented stx","stx_B","stx2a; stx2c",56
+"Fragmented stx","stx_B","stx2c",2
