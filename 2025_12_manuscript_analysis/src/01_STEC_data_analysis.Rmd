@@ -1,0 +1,353 @@
+---
+title: "STEC_data_analysis"
+author: "Julian A Paganini"
+date: "2025-12-03"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(ggplot2)
+library(tidyr)
+library(broom)
+library(dplyr)
+library(readxl)
+library(reshape2)
+library(tidyverse)
+library(viridis)
+library(stringr)
+library(ggrepel)
+```
+
+##1. Import data 
+
+```{r}
+#1. Import virulencefinder
+virulence_finder_raw <- read.csv("../../2023_11_general_genomics/results/virulence_finder/complete_genomes/stx_complete_results_deduplicate.csv")
+
+#2. Import mlst data
+mlst_raw <- read.csv("../../2023_11_general_genomics/results/mlst/2024_02_mlst.csv", sep=",", header=FALSE)
+mlst_raw$V1 <- mlst_raw$V1 %>%
+  basename() %>%
+  sub("_genomic\\.fna$", "", .)
+
+#3. Import all MLST
+mlst_all_raw <- read.csv("../../2023_11_general_genomics/results/mlst/all_mlst_name_mod.tsv", sep="\t", header=TRUE)
+
+
+#4. Import conversion fle
+ncbi_sra_relation <- read.csv("../../2023_10_raw_data/results/stec_info/biosample_strains_o157_h7_mod.csv", sep=",", header=FALSE)
+
+#5. Import final list of isolates
+benchmark_list_raw<- read.csv("../../2023_11_general_genomics/results/benchmark_isolate_list.txt", sep=",", header=FALSE)
+
+benchmark_list_final<-ncbi_sra_relation[ncbi_sra_relation$V1 %in% benchmark_list_raw$V1, ]
+
+#6. Import Serotypes
+serotypes_raw<- read.csv("../../2023_11_general_genomics/results/ectyper/output.tsv", sep="\t", header=TRUE)
+serotypes_raw$Name <- serotypes_raw$Name %>%
+  basename() %>%
+  sub("_genomic$", "", .)
+
+#7. Plasmid data - Benchmark
+plasmid_benchmark_raw<- read.csv("../../2023_11_general_genomics/results/plasmid_analysis/mge_cluster/STEC_prediction.csv", sep=",", header=TRUE)
+plasmid_benchmark_raw$isolate <- sub("_.*", "", plasmid_benchmark_raw$Sample_Name)
+
+#8. Plasmid data - MGE
+plasmid_model_raw<- read.csv("../../2023_11_general_genomics/data/mge_cluster_ecoli/ecoli_results.csv", sep=",", header=TRUE)
+
+#9. Jellyfish data
+jellyfish_raw<- read.csv("../../2023_11_general_genomics/results/jellyfish/jellyfish_repeat_summary_k21.tsv", sep="\t", header=TRUE)
+plasmid_benchmark_raw$isolate <- sub("_.*", "", plasmid_benchmark_raw$Sample_Name)
+
+```
+
+###2. Analyze MLST
+```{r}
+mlst_benchmark<-mlst_raw[mlst_raw$V1 %in% benchmark_list_final$V3,]
+mlst_benchmark_summary<-mlst_benchmark %>% group_by(V3) %>% summarise(count=n())
+```
+
+
+
+###3. Virulence profiles
+```{r fig.width=4, fig.height=3, dpi=300}
+
+virulence_finder_raw <- virulence_finder_raw %>%
+  mutate(VF_clean = str_extract(Virulence.factor, "^[^-]+"))
+
+virulence_finder_dedup <- virulence_finder_raw %>%
+  group_by(Folder, VF_clean, Position.in.contig) %>%
+  slice_sample(n = 1) %>%   # keep 1 random row from duplicates
+  ungroup()
+
+#Remove a duplicated case just based on contig position.
+virulence_finder_dedup<-virulence_finder_dedup[virulence_finder_dedup$VF_clean!="stx1",]
+
+virulence_profiles <- virulence_finder_dedup %>%
+  group_by(Folder) %>%
+  summarise(
+    stx_profile = paste(VF_clean, collapse = "; "), stx_count=n()
+  )
+
+virulence_profiles<-left_join(virulence_profiles,benchmark_list_final,by=c("Folder"="V1"))
+
+virulence_profiles_summary<-virulence_profiles %>% group_by(stx_profile,stx_count) %>% summarise(count=n())
+
+stx_count_summary<-virulence_profiles %>% group_by(stx_count) %>% summarise(count=n())
+
+#plot
+# 1. Ensure stx_count is numeric
+virulence_profiles_summary <- virulence_profiles_summary %>%
+  mutate(
+    stx_count = as.numeric(stx_count),
+    count     = as.numeric(count)
+  )
+
+# 2. Build the order of stx_profile based on stx_count (1 → 4)
+profile_order <- virulence_profiles_summary %>%
+  arrange(stx_count) %>%           # order by number of stx genes
+  pull(stx_profile)
+
+# 3. Apply ordering explicitly
+virulence_profiles_summary <- virulence_profiles_summary %>%
+  mutate(
+    stx_profile = factor(stx_profile, levels = unique(profile_order))
+  )
+
+virulence_profiles_summary$stx_plot<-ifelse(virulence_profiles_summary$stx_count >2, "Other", as.character( virulence_profiles_summary$stx_profile))
+
+ggplot(virulence_profiles_summary,
+       aes(x = stx_count, y = count, fill = stx_plot)) +
+  geom_col(position = "stack", color = "black", linewidth = 0.2) +
+  scale_x_continuous(breaks = sort(unique(virulence_profiles_summary$stx_count))) +
+  labs(
+    x = "Number of Stx operons",
+    y = "No. of isolates",
+    fill = "stx profile"
+  ) +
+scale_fill_manual(values = c(
+
+  # 1 stx variant
+  'stx1a'        = '#06BD00',
+  'stx2a'        = '#FB8072',
+  'stx2c'        = '#004DFF',
+
+  # 2 stx variants
+  'stx1a; stx2a' = '#F5A623',
+  'stx1a; stx2c' = '#11FAFF',
+  'stx2a; stx2a' = '#730004',
+  'stx2a; stx2c' = '#D0021B',
+  'stx2c; stx2c' = '#000A73',
+
+  'Other'      = '#CCCCCC'
+
+))+
+  theme_bw() +
+  theme(
+    axis.title.x = element_text(size = 14, face = 'bold'), 
+    axis.text.x = element_text(size = 14, angle = 0),
+    axis.title.y = element_text(size = 14, face = "bold"), 
+    axis.text.y = element_text(size = 12),
+    legend.title = element_text(size = 0), 
+    legend.text = element_text(size = 10), 
+    legend.position = 'right'
+  )
+```
+
+
+
+###4. Plasmid number analysis
+```{r}
+plasmid_profiles <- plasmid_benchmark_raw %>%
+  group_by(isolate) %>%
+  summarise(
+    plasmid_profile = paste(Standard_Cluster, collapse = "; "), plasmid_count=n()
+  )
+
+plasmid_count_distribution <-plasmid_profiles%>% group_by(plasmid_count) %>% summarise(nr_isolates_w_plasmids=n())
+
+plasmid_profiles_distribution<-plasmid_profiles%>% group_by(plasmid_profile) %>% summarise(nr_plasmid_profiles=n())
+
+```
+
+###5. Plasmid cluster analysis
+```{r fig.width=4, fig.height=6, dpi=300}
+#1. Fix data
+plasmid_benchmark_raw$plot_elipse<-ifelse(plasmid_benchmark_raw$Standard_Cluster!="-1",plasmid_benchmark_raw$Standard_Cluster,NA)
+
+plasmid_benchmark<-plasmid_benchmark_raw %>% filter(tsne1D!="-")
+
+plasmid_model_raw$plot_elipse<-ifelse(plasmid_model_raw$Standard_Cluster%in%plasmid_benchmark$plot_elipse,plasmid_model_raw$Standard_Cluster,NA)
+
+#GET labels
+label_points <- plasmid_benchmark_raw %>%
+  filter(!is.na(tsne1D), !is.na(tsne2D), !is.na(plot_elipse)) %>%
+  group_by(plot_elipse) %>%
+  slice(1) %>%
+  ungroup()
+
+all_data_elipse<-rbind(plasmid_benchmark[,-5],plasmid_model_raw[,-4])
+
+tnse_all_plasmids <- ggplot()+
+  geom_point(
+    data  = plasmid_model_raw,
+    aes(x = as.numeric(tsne1D),
+        y = as.numeric(tsne2D),
+      colour = "Other"),
+    size  = 2,
+    alpha = 0.3)+
+  geom_point(
+    data  = plasmid_benchmark,
+    aes(
+      x = as.numeric(tsne1D),
+      y = as.numeric(tsne2D),
+      colour = "O157:H7 - Benchmark"),
+    size  = 2,
+    alpha = 0.8) +
+  stat_ellipse(
+    data = all_data_elipse %>% filter(!is.na(plot_elipse)),
+    type  = "norm",
+    level = 0.99,
+    aes(x = as.numeric(tsne1D),
+        y = as.numeric(tsne2D),
+      group = plot_elipse)
+  ) +
+  geom_label_repel(
+    data = label_points,
+    aes(x = as.numeric(tsne1D),
+        y = as.numeric(tsne2D),
+        label = plot_elipse),
+    colour="#33A02C",
+    size = 4,
+    box.padding   = 0.25,
+    point.padding = 0.2,
+    force         = 40,
+    show.legend   = FALSE,
+    segment.color = '#33A02C',
+    max.overlaps  = Inf
+  ) +
+  theme_light() +
+  ggtitle("t-SNE plasmids MASH distances") +
+  scale_color_manual(values = c("#33A02C","grey80")) +
+  theme(
+    plot.title   = element_text(size = 0, hjust = 0.5, face = 'bold'),
+    axis.title.x = element_text(size = 20, face = 'bold'),
+    axis.text.x  = element_text(size = 12, angle = 0, hjust = 1),
+    axis.title.y = element_text(size = 20, face = "bold"),
+    axis.text.y  = element_text(size = 12, angle = 0),
+    legend.title = element_text(size = 16, face = 'bold'),
+    legend.text  = element_text(size = 15),
+    legend.position = 'top'
+  ) +
+  xlab('t-SNE 1') + ylab('t-SNE 2') +
+  labs(colour = '') +
+  guides(color = guide_legend(override.aes = list(size = 7)))
+
+tnse_all_plasmids
+
+
+```
+
+
+###6. Combine all metadata
+
+```{r}
+all_metadata<-left_join(mlst_all_raw,serotypes_raw,by=c("isolate"="Name"))
+all_metadata<-left_join(all_metadata,benchmark_list_final,by=c("isolate"="V3"))
+all_metadata$benchmark_included<-ifelse(is.na(all_metadata$V1),"no","yes")
+
+#virulence_profiles
+all_metadata<-left_join(all_metadata,virulence_profiles[,c(1,2,3)],by=c("V1"="Folder"))
+
+#plasmid types
+all_metadata<-left_join(all_metadata,plasmid_profiles,by=c("V1"="isolate"))
+colnames(all_metadata)[26:27] <- c("SRA", "Biosample")
+
+#Add jellyfish data
+all_metadata<-left_join(all_metadata,jellyfish_raw,by=c("isolate"="genome"))
+
+#write.csv(all_metadata, '../results/Supplementary_table_S2.csv',  row.names = FALSE)
+```
+
+
+###7. Create tree metadata
+
+```{r}
+tree_metadata<-all_metadata[,c(1,3,14,26,27,28,29,30,31,32)]
+
+tree_metadata$ST_plot<-ifelse(tree_metadata$ST=="11", "11", "Other")
+tree_metadata$Serotype_plot<-ifelse(tree_metadata$Serotype=="O157:H7", "O157:H7", "Other")
+
+tree_metadata$plasmid_profile_plot <- ifelse(
+  tree_metadata$plasmid_profile %in% c("25", "26", "25; 12","25; 20"),
+  tree_metadata$plasmid_profile,
+  "Other"
+)
+
+tree_metadata$stx_profile_plot <- ifelse(
+  tree_metadata$stx_profile %in% c("stx2c", "stx1a; stx2a", "stx2a; stx2c","stx2a","stx1a; stx2c"),
+  tree_metadata$stx_profile,
+  "Other"
+)
+
+tree_metadata$stx_profile_plot<-ifelse(tree_metadata$benchmark_included=='no',NA,tree_metadata$stx_profile_plot)
+
+tree_metadata$plasmid_profile_plot<-ifelse(tree_metadata$benchmark_included=='no',NA,tree_metadata$plasmid_profile_plot)
+
+tree_metadata$Serotype_plot<-ifelse(tree_metadata$benchmark_included=='no',NA,tree_metadata$Serotype_plot)
+
+#rename columns
+colnames(tree_metadata)[4:5] <- c("SRA", "Biosample")
+colnames(tree_metadata) <- paste0(colnames(tree_metadata), "__autocolour")
+#write.csv(tree_metadata, '../results/tree_metadata.csv',  row.names = FALSE)
+
+```
+
+
+
+###8. Plot Repeats
+```{r fig.width=3, fig.height=3, dpi=300}
+
+repeat_data<-all_metadata[,c(1,14,38,39)]
+repeat_data$Serotype_plot<-ifelse(repeat_data$Serotype=="O157:H7", "O157:H7", "Other")
+
+wilcoxon_test<-wilcox.test(rep_frac_total ~ Serotype_plot, data = repeat_data)
+wilcoxon_test
+
+repeat_data_summary<-repeat_data %>% group_by(Serotype_plot) %>% summarise(firstq=quantile(rep_frac_total,0.25), median=median(rep_frac_total),thirdq=quantile(rep_frac_total,0.75))
+
+#make the data long
+colnames(repeat_data)[c(3,4)]<-c("Fraction of Repeated k-mer types", "Total Fraction of Repeated k-mers")
+
+#write.csv(repeat_data, '../results/TMP_repeat_data.csv',  row.names = FALSE)
+
+
+
+repeat_distribution_total <- ggplot(repeat_data, 
+                        aes(x = Serotype_plot, y = `Total Fraction of Repeated k-mers`)) +
+  geom_violin(aes(fill = Serotype_plot),alpha = 0.8, trim = TRUE,scale = "width") +
+  geom_boxplot(position = position_dodge(width = 0.8), width = 0.2,outlier.shape = NA) +
+  coord_cartesian(ylim = c(0, 0.3)) +
+  theme_bw() +
+  # Uncomment and customize color if needed
+  scale_fill_manual(values = c('O157:H7' = '#33A02C','Other' = '#D9D9D9')) +
+  theme(
+    plot.title = element_text(size = 0, hjust = 0.5, face = 'bold'),
+    axis.title.x = element_text(size = 14, face = 'bold'), 
+    axis.text.x = element_text(size = 14, angle = 0),
+    axis.title.y = element_text(size = 14, face = "bold"), 
+    axis.text.y = element_text(size = 12),
+    legend.title = element_text(size = 0), 
+    legend.text = element_text(size = 18), 
+    legend.position = 'none'
+  ) +
+  xlab('Serotype') + 
+  ylab('Total Fraction of Repeated k-mers')
+
+repeat_distribution_total
+
+```
+
+
+

@@ -1,0 +1,527 @@
+---
+title: "Pangenome plot comparison"
+author: "Julian A Paganini"
+date: "2025-12-03"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(ggplot2)
+library(tidyr)
+library(broom)
+library(dplyr)
+library(readxl)
+library(reshape2)
+library(tidyverse)
+library(viridis)
+library(stringr)
+
+tool_levels <- c("Panaroo", "PPanGGOLiN", "ggCaller", "Bifrost", "Cuttlefish", "Pangraph", "Roary")
+tool_colors <- c(
+  "PPanGGOLiN" = "#FF6600",
+  "Panaroo" = "#E00000",
+  "ggCaller" = "#D9EB00",
+  "Bifrost" = "#00BF2F",
+  "Cuttlefish" = "#57A303",
+  "Pangraph" = "#1F02D4",
+  "Roary" = "#7B3294"
+)
+
+read_roary_abundances <- function(abundance_dir, total_isolates = 175) {
+  candidates <- c(
+    file.path(abundance_dir, "roary_gene_presence_absence.csv"),
+    file.path(abundance_dir, "gene_presence_absence.csv")
+  )
+  roary_file <- candidates[file.exists(candidates)][1]
+  if (is.na(roary_file)) {
+    warning("Roary gene_presence_absence.csv not found in ", abundance_dir)
+    return(tibble(node_id = character(), n_isolates = numeric(), fraction_isolates = numeric(), Tool = character()))
+  }
+
+  roary <- read.csv(roary_file, check.names = FALSE)
+  roary %>%
+    transmute(
+      node_id = Gene,
+      n_isolates = as.numeric(`No. isolates`),
+      fraction_isolates = n_isolates / total_isolates,
+      Tool = "Roary"
+    )
+}
+```
+
+##1. Import data and Wrangle
+
+```{r}
+#1. Import all complete genomes data
+complete_lengths_subgraphs_id <- read.csv("../results/pangenome_parsed/01_all_complete/length_results.csv")
+complete_degree_id <- read.csv("../results/pangenome_parsed/01_all_complete/degree_results.csv")
+#combine information
+all_complete_data<-left_join(complete_lengths_subgraphs_id,complete_degree_id,by=c("Tool","node_id"="Node"))
+#change names
+all_complete_data <- all_complete_data %>%
+  mutate(
+    Tool = recode(
+      Tool,
+      "pangraph" = "Pangraph",
+      "panaroo" = "Panaroo",
+      "ppanggolin" = "PPanGGOLiN",
+      "ggcaller" = "ggCaller",
+      "bifrost" = "Bifrost",
+      "cuttlefish" = "Cuttlefish",
+      "roary" = "Roary"
+      # add more as needed
+    )
+  )
+
+#Re-order tools
+all_complete_data$Tool <- factor(
+  all_complete_data$Tool,
+  levels = tool_levels
+)
+
+all_complete_data$node_id <- gsub("'", "", all_complete_data$node_id)
+
+
+#Import node abundances
+bifrost_abundances_filt<- read.csv("../../2024_01_pangenome_constructions/results/pangenome_graph/pure_complete/abundances/bifrost_unitig_id_abundance.tsv", sep="\t")
+bifrost_abundances_filt<-bifrost_abundances_filt[,c(177:179)]
+#complete for the rest
+names(bifrost_abundances_filt)<-c("node_id","n_isolates","fraction_isolates")
+bifrost_abundances_filt$Tool<-"Bifrost"
+#
+cuttlefish_abundances_filt<- read.csv("../../2024_01_pangenome_constructions/results/pangenome_graph/pure_complete/abundances/cuttlefish_unitig_id_abundance.csv")
+cuttlefish_abundances_filt<-cuttlefish_abundances_filt[,c(1:3)]
+names(cuttlefish_abundances_filt) <- c("node_id","n_isolates","fraction_isolates")
+cuttlefish_abundances_filt$Tool <- "Cuttlefish"
+
+ggcaller_abundances_filt<- read.csv("../../2024_01_pangenome_constructions/results/pangenome_graph/pure_complete/abundances/ggcaller_gene_presence_absence_abundance.tsv", sep="\t")
+ggcaller_abundances_filt<-ggcaller_abundances_filt[,c(1,177,178)]
+names(ggcaller_abundances_filt) <- c("node_id","n_isolates","fraction_isolates")
+ggcaller_abundances_filt$Tool <- "ggCaller"
+
+panaroo_abundances_filt<- read.csv("../../2024_01_pangenome_constructions/results/pangenome_graph/pure_complete/abundances/panaroo_gene_presence_absence_abundance.tsv", sep="\t")
+panaroo_abundances_filt<-panaroo_abundances_filt[,c(1,177,178)]
+names(panaroo_abundances_filt) <- c("node_id","n_isolates","fraction_isolates")
+panaroo_abundances_filt$Tool <- "Panaroo"
+
+ppanggolin_abundances_filt<- read.csv("../../2024_01_pangenome_constructions/results/pangenome_graph/pure_complete/abundances/ppanggolin_gene_id_abundance.csv")
+#add number
+ppanggolin_abundances_filt$Gene <- 1:nrow(ppanggolin_abundances_filt)
+ppanggolin_abundances_filt<-ppanggolin_abundances_filt[,c(1,3)]
+names(ppanggolin_abundances_filt) <- c("node_id","n_isolates")
+ppanggolin_abundances_filt$fraction_isolates <- round(ppanggolin_abundances_filt$n_isolates / 175, 9)
+ppanggolin_abundances_filt$Tool <- "PPanGGOLiN"
+
+
+pangraph_abundances_filt<- read.csv("../../2024_01_pangenome_constructions/results/pangenome_graph/pure_complete/abundances/pangraph_abundances.tsv")
+pangraph_abundances_filt<-pangraph_abundances_filt[,c(1,4,5)]
+pangraph_abundances_missing_filt<- read.csv("../../2024_01_pangenome_constructions/results/pangenome_graph/pure_complete/abundances/pangraph_abundances_missing.tsv")
+pangraph_abundances_missing_filt<-pangraph_abundances_missing_filt[,c(1,3,4)]
+pangraph_abundances_filt<-rbind(pangraph_abundances_filt,pangraph_abundances_missing_filt)
+names(pangraph_abundances_filt) <- c("node_id","n_isolates","fraction_isolates")
+pangraph_abundances_filt$Tool <- "Pangraph"
+
+roary_abundances_filt <- read_roary_abundances("../../2024_01_pangenome_constructions/results/pangenome_graph/pure_complete/abundances")
+
+
+all_abundances <- rbind(
+  bifrost_abundances_filt[, c("node_id","n_isolates","fraction_isolates","Tool")],
+  cuttlefish_abundances_filt[, c("node_id","n_isolates","fraction_isolates","Tool")],
+  ggcaller_abundances_filt[, c("node_id","n_isolates","fraction_isolates","Tool")],
+  panaroo_abundances_filt[, c("node_id","n_isolates","fraction_isolates","Tool")],
+  ppanggolin_abundances_filt[, c("node_id","n_isolates","fraction_isolates","Tool")],
+  pangraph_abundances_filt[, c("node_id","n_isolates","fraction_isolates","Tool")],
+  roary_abundances_filt[, c("node_id","n_isolates","fraction_isolates","Tool")]
+)
+
+
+all_complete_data<-left_join(all_complete_data,all_abundances,by=c("Tool","node_id"))
+
+
+
+```
+
+
+##2. PLot complete genome data - 
+
+###2.1 Figure 2A - Node length distribution
+
+```{r fig.width=4, fig.height=4, dpi=300}
+#Plot node-length
+node_length_distribution <- ggplot(all_complete_data, 
+                        aes(x = Tool, y = log(length,10))) +
+  geom_violin(aes(fill = Tool),alpha = 0.8, trim = TRUE,scale = "width") +
+  geom_boxplot(position = position_dodge(width = 0.8), width = 0.2,outlier.shape = NA) +
+  #coord_cartesian(ylim = c(0, 0.3)) +
+  theme_minimal() +
+  # Uncomment and customize color if needed
+  scale_fill_manual(values = tool_colors) +
+  theme(
+    plot.title = element_text(size = 0, hjust = 0.5, face = 'bold'),
+    axis.title.x = element_text(size = 14, face = 'bold'), 
+    axis.text.x = element_text(size = 14, angle = 90, vjust=0.5),
+    axis.title.y = element_text(size = 14), 
+    axis.text.y = element_text(size = 14),
+    legend.title = element_text(size = 0), 
+    legend.text = element_text(size = 18), 
+    legend.position = 'none'
+  ) +
+  xlab('') + 
+  ylab('log10 (node-length[bp])')
+
+node_length_distribution
+
+```
+
+
+###2.2 Supplementary table S3 - Node length distribution
+
+```{r}
+node_length_dist<-all_complete_data %>% group_by(Tool) %>% summarise(min=min(length), first_quartile=quantile(length,0.25), median=median(length), third_quartile=quantile(length,0.75), max=max(length))
+write.csv(node_length_dist, '../results/Supplementary_table_S3.csv',  row.names = FALSE)
+```
+
+###2.3 Figure 2B (top) - Subgraph size cummulative plot
+```{r fig.width=4, fig.height=8, dpi=100}
+subgraph_compositions<-all_complete_data %>% group_by(Tool,subgraph_id) %>% summarise(nr_nodes=n(),subgraph_length=sum(length))
+
+subgraph_compositions <- subgraph_compositions %>%
+  group_by(Tool) %>%
+  mutate(
+    total_nodes   = sum(nr_nodes),
+    total_length  = sum(subgraph_length),
+    frac_nodes    = nr_nodes / total_nodes,
+    frac_length   = subgraph_length / total_length
+  ) %>%
+  ungroup()
+
+
+# Prepare cumulative data
+cdf_data <- subgraph_compositions %>%
+  group_by(Tool) %>%
+  arrange(desc(frac_nodes), .by_group = TRUE) %>%
+  mutate(
+    rank = row_number(),              # subgraph rank
+    cum_frac_nodes = cumsum(frac_nodes)
+  ) %>%
+  ungroup()
+
+#write supplementary table S4
+write.csv(cdf_data, '../results/Supplementary_table_S4.csv',  row.names = FALSE)
+
+# Plot: all tools in one panel, x = rank, y = cumulative fraction
+ggplot(cdf_data, aes(x = rank, y = cum_frac_nodes, colour = Tool)) +
+  geom_line(size = 1.2, alpha = 0.9) +
+  scale_y_continuous(
+    labels = scales::percent_format(accuracy = 1),
+    name   = "Cumulative (%) of total graph"
+  ) +
+  scale_colour_manual(values = tool_colors) +
+  labs(
+    x = "Subgraph rank (largest to smallest)",
+    title = ""
+  ) +
+  theme_minimal(base_size = 14) +
+  theme(
+    panel.grid.minor = element_blank(),
+    legend.position = "top",
+    legend.title = element_text(size = 0),
+    axis.title.x = element_text(size = 12), 
+    axis.text.x = element_text(size = 12),
+    axis.title.y = element_text(size = 12), 
+    axis.text.y = element_text(size = 12),
+  )
+
+
+```
+
+###2.4 Figure 2B (bottom) - Largest connected component fraction
+
+```{r fig.width=7, fig.height=4, dpi=300}
+largest_component <- subgraph_compositions %>%
+  group_by(Tool) %>%
+  summarise(
+    largest_frac = max(frac_nodes),
+    largest_length_frac = max(frac_length)
+  )
+
+ggplot(largest_component, aes(x = Tool, y = largest_frac, fill = Tool)) +
+  geom_col(width = 0.7, alpha = 0.8) +
+  geom_text(
+    aes(label = scales::percent(largest_frac, accuracy = 0.01)),
+    vjust = -0.5,
+    size = 3
+  ) +
+  scale_fill_manual(values = tool_colors) +
+  scale_y_continuous(
+    labels = scales::percent_format(accuracy = 1),
+    expand = expansion(mult = c(0, 0.1))  # gives space above bars for the text
+  ) +
+  labs(
+    y = "%(nodes) in largest subgraph",
+    x = "",
+    title = ""
+  ) +
+  theme_minimal(base_size = 14) +
+  theme(
+    legend.position = "none",
+    panel.grid.minor = element_blank(),
+    legend.title = element_text(size = 0),
+    axis.title.x = element_text(size = 12), 
+    axis.text.x = element_text(size = 10),
+    axis.title.y = element_text(size = 12), 
+    axis.text.y = element_text(size = 10),
+  )
+
+```
+
+###2.5 Supplementary Figure S1 - Node Degree distribution
+
+```{r fig.width=4, fig.height=8, dpi=300}
+node_degree_summary<-all_complete_data %>% group_by(Tool,Degree) %>% summarise(nr_nodes_w_degree=n())
+
+node_degree_summary <- node_degree_summary %>%
+  bind_rows(
+    tibble(
+      Tool = "Cuttlefish",
+      Degree = 0,
+      nr_nodes_w_degree = 0
+    ),
+    tibble(
+      Tool = "Cuttlefish",
+      Degree = 9,
+      nr_nodes_w_degree = 0
+    ),
+    tibble(
+      Tool = "Cuttlefish",
+      Degree = 10,
+      nr_nodes_w_degree = 0
+    ),
+    tibble(
+      Tool = "Bifrost",
+      Degree = 9,
+      nr_nodes_w_degree = 0
+    ),
+    tibble(
+      Tool = "Bifrost",
+      Degree = 10,
+      nr_nodes_w_degree = 0
+    ),
+    tibble(
+      Tool = "Pangraph",
+      Degree = 1,
+      nr_nodes_w_degree = 0
+    ),
+    tibble(
+      Tool = "PPanGGOLiN",
+      Degree = 0,
+      nr_nodes_w_degree = 0
+    )
+  )
+
+node_degree_summary <- node_degree_summary %>%
+  group_by(Tool) %>%
+  mutate(
+    total_nodes   = sum(nr_nodes_w_degree),
+    perc_nodes_w_degree    = nr_nodes_w_degree / total_nodes
+  ) %>%
+  ungroup()
+
+node_degree_summary$Tool <- factor(
+  node_degree_summary$Tool,
+  levels = tool_levels
+)
+
+#write.csv(node_degree_summary, '../results/TMP_node_degree_dist.csv',  row.names = FALSE)
+node_deg_sub <- node_degree_summary %>%
+  filter(Degree <= 10)
+
+total_fraction_deg_10<-node_deg_sub %>% group_by(Tool) %>% summarise(total_percentage=sum(perc_nodes_w_degree))
+
+ggplot(node_deg_sub, aes(x = Degree, y = perc_nodes_w_degree, fill = Tool)) +
+  geom_area(alpha = 0.8) +
+  geom_text(
+    aes(label = scales::percent(perc_nodes_w_degree, accuracy = 0.1)),
+    vjust = -0.4,
+    size = 3
+  ) +
+  scale_y_continuous(
+    limits = c(0, 0.90),
+    labels = scales::percent_format(accuracy = 1)
+  ) +
+  scale_x_continuous(breaks = 0:10) +
+  labs(
+    y = "Percentage of nodes",
+    x = "Node degree",
+    title = ""
+  ) +
+  facet_wrap(~ Tool, ncol = 1) +
+  scale_fill_manual(values = tool_colors) +
+  theme_bw() +
+  theme(
+        legend.position = "none",
+        panel.grid.minor = element_blank(),
+        legend.title = element_text(size = 0),
+        axis.title.x = element_text(size = 12), 
+        axis.text.x = element_text(size = 10),
+        axis.title.y = element_text(size = 12), 
+        axis.text.y = element_text(size = 10),
+        strip.text.x = element_text(size = 10)
+        )
+```
+
+##2.7 Node degree and frequency, normalized per tool
+
+```{r fig.width=9, fig.height=9, dpi=300}
+
+bins <- seq(0, 1, by = 0.05)
+
+df <- all_complete_data %>%
+  filter(
+    Degree >= 0, Degree <= 10,
+    fraction_isolates >= 0, fraction_isolates <= 1
+  ) %>%
+  mutate(
+    degree_bin = Degree,
+    frac_bin_raw = cut(fraction_isolates, breaks = bins, include.lowest = TRUE),
+    frac_bin = factor(
+      frac_bin_raw,
+      labels = paste0(seq(0, 95, 5), "%–", seq(5, 100, 5), "%")
+    )
+  )
+
+# Count per bin per Tool
+df_bins <- df %>%
+  group_by(Tool, degree_bin, frac_bin) %>%
+  summarise(count = n(), .groups = "drop")
+
+# TOTAL COUNTS per tool (correct normalization)
+totals <- df %>%
+  group_by(Tool) %>%
+  summarise(total_nodes = n())
+
+# Normalize by total # nodes of that Tool
+df_bins <- df_bins %>%
+  left_join(totals, by = "Tool") %>%
+  mutate(count_norm = count / total_nodes)
+
+
+df_bins$Tool <- factor(
+  df_bins$Tool,
+  levels = tool_levels
+)
+
+write.csv(df_bins, '../results/IMPORTANT_complete_node_degree_normalized_tool.csv',  row.names = FALSE)
+
+# Plot
+ggplot(df_bins, aes(x = degree_bin, y = frac_bin, fill = count_norm)) +
+  geom_tile() +
+  scale_fill_viridis_c(
+    name = "Normalized\nnode count",
+    limits = c(0, NA)
+  ) +
+  scale_x_continuous(breaks = 0:10, name = "Node degree") +
+  ylab("Fraction of isolates") +
+  facet_wrap(~Tool) +
+  theme_bw() +
+  theme(
+    axis.title.x = element_text(size = 14, face = "bold"),
+    axis.text.x = element_text(size = 10),
+    axis.title.y = element_text(size = 14, face = "bold"),
+    axis.text.y = element_text(size = 10),
+    panel.grid = element_blank(),
+    strip.text = element_text(size=12,face = "bold")
+  )
+```
+###2.8 Figure 2C - Node degree and frequency, normalized per node-degree
+
+
+```{r fig.width=15, fig.height=14, dpi=300}
+bins <- seq(0, 1, by = 0.05)
+
+df <- all_complete_data %>%
+  filter(
+    Degree >= 0, Degree <= 10,
+    fraction_isolates >= 0, fraction_isolates <= 1
+  ) %>%
+  mutate(
+    degree_bin = Degree,
+    frac_bin_raw = cut(fraction_isolates, breaks = bins, include.lowest = TRUE),
+    frac_bin = factor(
+      frac_bin_raw,
+      labels = paste0(seq(0, 95, 5), "%–", seq(5, 100, 5), "%")
+    )
+  )
+
+
+df_bins_node <- df %>%
+  group_by(Tool, degree_bin, frac_bin) %>%
+  summarise(count = n(), .groups = "drop")
+
+# Normalized - total nodes per Tool & degree
+totals_deg <- df %>%
+  group_by(Tool, degree_bin) %>%
+  summarise(total_deg = n(), .groups = "drop")
+
+totals_nodes <- df %>%
+  group_by(Tool) %>%
+  summarise(total_nodes = n(), .groups = "drop")
+
+# normalise within Tool × degree
+df_bins_node <- df_bins_node %>%
+  left_join(totals_deg, by = c("Tool", "degree_bin")) %>%
+  mutate(count_norm = count / total_deg)
+
+df_bins_node <- df_bins_node %>%
+  left_join(totals_nodes, by = c("Tool")) %>%
+  mutate(count_total_norm = count / total_nodes)
+
+
+write.csv(df_bins_node, '../results/Supplementary_table_S5.csv',  row.names = FALSE)
+
+df_bins_node$Tool <- factor(
+  df_bins_node$Tool,
+  levels = tool_levels
+)
+
+
+# Plot
+
+ggplot(df_bins_node, aes(x = degree_bin, y = frac_bin, fill = count_norm)) +
+  geom_tile() +
+  scale_fill_viridis_c(
+    name = "Node fraction\n(Degree normalized)",
+    limits = c(0, NA),
+    guide = guide_colorbar(
+      barheight = unit(5, "cm"),   # height of the color bar
+      barwidth  = unit(0.8, "cm"), # width of the color bar
+      title.position = "top",
+      title.hjust = 0.5
+    )
+  ) +
+  scale_x_continuous(breaks = 0:10, name = "Node degree") +
+  ylab("Fraction of isolates") +
+  facet_wrap(~Tool) +
+  theme_bw() +
+  theme(
+    axis.title.x = element_text(size = 28, face = "bold"),
+    axis.text.x = element_text(size = 20),
+    axis.title.y = element_text(size = 28, face = "bold"),
+    axis.text.y = element_text(size = 16),
+    panel.grid = element_blank(),
+    strip.text = element_text(size=24,face = "bold"),
+    
+    legend.title = element_text(size = 18, face = "bold", margin = margin(b = 15)),
+    legend.text  = element_text(size = 14),
+    legend.key.height = unit(1.2, "cm"),  # affects spacing, optional
+    legend.key.width  = unit(0.8, "cm")
+  )
+```
+
+
+
+
+
+
+
