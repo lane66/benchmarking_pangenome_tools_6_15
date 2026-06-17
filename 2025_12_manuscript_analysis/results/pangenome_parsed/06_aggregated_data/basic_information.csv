@@ -1,0 +1,36 @@
+Tool,Node Count,Edge Count,Subgraph Count,Length Median,Q3,Q3-Q1,Percentage of Complete genome ,Method
+panaroo,6891,7307,145,663.0,1095.0,741.0,0%,Gene annotation and clustering
+roary,10050,13169,622,581.0,998.0,690.0,0%,Gene annotation and clustering
+PPanGGOLiN,7266,8248,66,662.0,1087.25,725.25,0%,Gene annotation and clustering
+ggcaller,7451,7677,723,642.0,1059.0,720.0,0%,Gene annotation and clustering
+bifrost,62595,80398,498,61.0,62.0,25.0,0%,Unitig calling
+cuttlefish,159401,204271,6,53.0,61.0,26.0,0%,Unitig calling
+pangraph,577,275,515,149.0,678.0,565.0,0%,Multiple sequence alignments
+panaroo,7593,8561,140,648.0,1071.0,723.0,11%,Gene annotation and clustering
+roary,10985,14965,706,569.0,986.0,675.0,11%,Gene annotation and clustering
+PPanGGOLiN,7248,8696,53,662.0,1088.75,723.75,11%,Gene annotation and clustering
+ggcaller,7561,8251,643,642.0,1062.0,720.0,11%,Gene annotation and clustering
+bifrost,61885,80032,458,61.0,62.0,24.0,11%,Unitig calling
+cuttlefish,152511,196400,4,54.0,61.0,25.0,11%,Unitig calling
+pangraph,910,1060,259,666.0,2868.0,2688.0,11%,Multiple sequence alignments
+panaroo,8327,10836,113,636.0,1065.0,723.0,50%,Gene annotation and clustering
+roary,12687,18770,539,560.0,974.0,666.0,50%,Gene annotation and clustering
+PPanGGOLiN,7277,9280,43,665.0,1088.0,717.0,50%,Gene annotation and clustering
+ggcaller,7748,8720,730,642.0,1062.0,723.0,50%,Gene annotation and clustering
+bifrost,61286,79955,478,61.0,61.0,22.0,50%,Unitig calling
+cuttlefish,144483,188298,6,56.0,61.0,24.0,50%,Unitig calling
+pangraph,1333,1587,379,544.0,2243.0,2071.0,50%,Multiple sequence alignments
+panaroo,8703,12123,57,633.0,1062.0,721.5,89%,Gene annotation and clustering
+roary,12942,20357,306,569.0,992.0,672.0,89%,Gene annotation and clustering
+PPanGGOLiN,7265,9611,34,674.0,1097.0,720.0,89%,Gene annotation and clustering
+ggcaller,7698,9058,663,651.0,1074.0,726.0,89%,Gene annotation and clustering
+bifrost,60224,79505,382,61.0,62.0,22.0,89%,Unitig calling
+cuttlefish,128837,170507,3,60.0,61.0,22.0,89%,Unitig calling
+pangraph,1770,2158,488,517.5,2099.75,1916.75,89%,Multiple sequence alignments
+panaroo,8740,12925,6,636.0,1062.0,720.0,100%,Gene annotation and clustering
+roary,12574,20316,7,578.0,1001.0,675.0,100%,Gene annotation and clustering
+PPanGGOLiN,7148,9593,4,683.0,1106.75,723.75,100%,Gene annotation and clustering
+ggcaller,7625,9152,582,660.0,1086.0,729.0,100%,Gene annotation and clustering
+bifrost,58991,78439,324,61.0,62.0,20.0,100%,Unitig calling
+cuttlefish,117196,157027,2,61.0,61.0,20.0,100%,Unitig calling
+pangraph,1667,2192,332,646.0,2407.5,2160.5,100%,Multiple sequence alignments
